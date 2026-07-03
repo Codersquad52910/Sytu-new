@@ -1,58 +1,83 @@
+const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
-
-// Mock in-memory database of users
-// Password hashes are generated using bcryptjs
-const users = [
-  {
-    id: 1,
-    username: "admin",
-    // bcrypt hash for password "admin123"
-    passwordHash: "$2a$10$tM3NqZ8eKkH9zV/p192XGexrD7t3VjA1Q8eU5E5gYgWl1wzN3H3kS"
-  },
-  {
-    id: 2,
-    username: "user",
-    // bcrypt hash for password "user123"
-    passwordHash: "$2a$10$mB5.P/qR.L0i0c6uW1N2OesFf1G/gW2XvVq3l3qH1K2sOq5RzW8bS"
-  }
-];
+const User = require('./models/User');
 
 /**
- * Find a user by username
- * @param {string} username 
- * @returns {object|null}
+ * Connect to MongoDB using the MONGODB_URI env variable.
  */
-function findUserByUsername(username) {
-  return users.find(u => u.username.toLowerCase() === username.toLowerCase()) || null;
+async function connectDB() {
+  const uri = process.env.MONGODB_URI;
+  if (!uri) {
+    console.error('❌  MONGODB_URI is not set in .env');
+    process.exit(1);
+  }
+
+  try {
+    await mongoose.connect(uri);
+    console.log('✅  MongoDB connected successfully');
+  } catch (err) {
+    console.error('❌  MongoDB connection error:', err.message);
+    process.exit(1);
+  }
 }
 
 /**
- * Register a new user
- * @param {string} username 
- * @param {string} password 
- * @returns {object}
+ * Find a user by username (case-insensitive).
+ * @param {string} username
+ * @returns {Promise<object|null>}
+ */
+async function findUserByUsername(username) {
+  return User.findOne({ username: username.toLowerCase() });
+}
+
+/**
+ * Register a new local user.
+ * @param {string} username
+ * @param {string} password
+ * @returns {Promise<object>}
  */
 async function registerUser(username, password) {
-  const existingUser = findUserByUsername(username);
-  if (existingUser) {
-    throw new Error("User already exists");
+  const existing = await findUserByUsername(username);
+  if (existing) {
+    throw new Error('User already exists');
   }
 
   const salt = await bcrypt.genSalt(10);
   const passwordHash = await bcrypt.hash(password, salt);
-  
-  const newUser = {
-    id: users.length + 1,
-    username,
-    passwordHash
-  };
-  
-  users.push(newUser);
-  return newUser;
+
+  const user = await User.create({
+    username: username.toLowerCase(),
+    passwordHash,
+    provider: 'local',
+  });
+
+  return user;
+}
+
+/**
+ * Find an existing user by their Firebase UID, or create one from the
+ * verified Google profile. OAuth users have no password hash.
+ * @param {{ uid: string, email: string|null, name: string|null, picture: string|null }} profile
+ * @returns {Promise<object>}
+ */
+async function findOrCreateGoogleUser({ uid, email, name, picture }) {
+  let user = await User.findOne({ firebaseUid: uid });
+  if (user) return user;
+
+  user = await User.create({
+    firebaseUid: uid,
+    username: (name || email || `user_${uid.slice(0, 6)}`).toLowerCase(),
+    email: email || null,
+    photoURL: picture || null,
+    provider: 'google',
+  });
+
+  return user;
 }
 
 module.exports = {
-  users,
+  connectDB,
   findUserByUsername,
-  registerUser
+  registerUser,
+  findOrCreateGoogleUser,
 };

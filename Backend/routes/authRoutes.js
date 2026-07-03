@@ -1,12 +1,40 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
-const bcrypt = require('bcryptjs');
 const { findUserByUsername, registerUser } = require('../db');
 const basicAuth = require('../middleware/basicAuth');
 const { jwtAuth, JWT_SECRET } = require('../middleware/jwtAuth');
 const cacheMiddleware = require('../redis/cacheMiddleware');
+const { verifyGoogleIdToken } = require('../services/oauthService');
 
 const router = express.Router();
+
+/**
+ * @route   POST /api/auth/google
+ * @desc    Verify a Firebase Google ID token and return an app JWT
+ * @access  Public
+ */
+router.post('/google', async (req, res) => {
+  const { idToken } = req.body;
+
+  if (!idToken) {
+    return res.status(400).json({ message: 'idToken is required.' });
+  }
+
+  try {
+    const { token, user } = await verifyGoogleIdToken(idToken);
+    return res.json({
+      message: 'Google authentication successful.',
+      token,
+      user,
+    });
+  } catch (error) {
+    if (error.code === 'INVALID_TOKEN') {
+      return res.status(401).json({ message: error.message });
+    }
+    console.error('Google auth error:', error);
+    return res.status(500).json({ message: 'Error authenticating with Google.' });
+  }
+});
 
 /**
  * @route   POST /api/auth/register
@@ -29,7 +57,7 @@ router.post('/register', async (req, res) => {
     return res.status(201).json({
       message: 'User registered successfully.',
       user: {
-        id: newUser.id,
+        id: newUser._id,
         username: newUser.username
       }
     });
@@ -56,20 +84,20 @@ router.post('/login', async (req, res) => {
 
   try {
     // Check if user exists
-    const user = findUserByUsername(username);
+    const user = await findUserByUsername(username);
     if (!user) {
       return res.status(401).json({ message: 'Invalid username or password.' });
     }
 
     // Verify password
-    const isMatch = await bcrypt.compare(password, user.passwordHash);
+    const isMatch = await user.comparePassword(password);
     if (!isMatch) {
       return res.status(401).json({ message: 'Invalid username or password.' });
     }
 
     // Generate JWT payload
     const payload = {
-      id: user.id,
+      id: user._id,
       username: user.username
     };
 

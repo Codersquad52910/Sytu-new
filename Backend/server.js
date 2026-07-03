@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const authRoutes = require('./routes/authRoutes');
 const { connectRedis, getIsConnected } = require('./redis/client');
+const { connectDB } = require('./db');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -32,6 +33,8 @@ app.get('/', (req, res) => {
 // Start the server
 app.listen(PORT, async () => {
   console.log(` Server running on: http://localhost:${PORT}`);
+  // Initialize MongoDB Connection
+  await connectDB();
   // Initialize Redis Connection
   await connectRedis();
 });

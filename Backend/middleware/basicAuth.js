@@ -1,4 +1,3 @@
-const bcrypt = require('bcryptjs');
 const { findUserByUsername } = require('../db');
 
 /**
@@ -28,21 +27,21 @@ async function basicAuth(req, res, next) {
 
   try {
     // Find user in DB
-    const user = findUserByUsername(username);
+    const user = await findUserByUsername(username);
     if (!user) {
       res.setHeader('WWW-Authenticate', 'Basic realm="Secure Area"');
       return res.status(401).json({ message: 'Invalid username or password.' });
     }
 
     // Verify password match using bcrypt
-    const isMatch = await bcrypt.compare(password, user.passwordHash);
+    const isMatch = await user.comparePassword(password);
     if (!isMatch) {
       res.setHeader('WWW-Authenticate', 'Basic realm="Secure Area"');
       return res.status(401).json({ message: 'Invalid username or password.' });
     }
 
     // Attach user (excluding password hash) to request
-    req.user = { id: user.id, username: user.username };
+    req.user = { id: user._id, username: user.username };
     next();
   } catch (error) {
     console.error('Basic Auth error:', error);

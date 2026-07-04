@@ -1,0 +1,13 @@
+{
+  "folders": [
+    {
+      "name": "Backend Service",
+      "path": "backend"
+    },
+    {
+      "name": "Frontend Web App",
+      "path": "frontend"
+    }
+  ],
+  "settings": {}
+}
